@@ -7,6 +7,7 @@ app = Flask(__name__)
 CSV_FILE = 'EXP_COURS.csv'
 DB_FILE = 'scuola.db'
 
+# --- FUNZIONE INIZIALE: Crea il database dei recuperi se non esiste ---
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     conn.execute('''CREATE TABLE IF NOT EXISTS recuperi 
@@ -14,6 +15,7 @@ def init_db():
     conn.commit()
     conn.close()
 
+# --- LOGICA DI RICERCA: Chi è libero? ---
 def trova_sostituti(giorno, ora):
     if not os.path.exists(CSV_FILE):
         return [], [], "Errore: File CSV non trovato!"
@@ -21,10 +23,12 @@ def trova_sostituti(giorno, ora):
     df = pd.read_csv(CSV_FILE, sep=';')
     df['DOC_COGN'] = df['DOC_COGN'].fillna('').str.strip()
     
+    # 1. Quelli che hanno "DISP" (Disposizione) scritta proprio in quell'ora
     disp = df[(df['GIORNO'].str.lower() == giorno.lower()) & 
               (df['O.INIZIO'] == ora) & 
               (df['MAT_NOME'] == 'DISP')]['DOC_COGN'].unique().tolist()
     
+    # 2. Quelli che non hanno nessuna lezione (nomi non presenti in quell'ora)
     impegnati = df[(df['GIORNO'].str.lower() == giorno.lower()) & 
                    (df['O.INIZIO'] == ora)]['DOC_COGN'].unique()
     tutti = df['DOC_COGN'].unique()
@@ -32,6 +36,7 @@ def trova_sostituti(giorno, ora):
     
     return disp, liberi, None
 
+# --- INTERFACCIA WEB ---
 @app.route('/', methods=['GET', 'POST'])
 def home():
     init_db()
@@ -47,6 +52,7 @@ def home():
     
     return render_template_string(HTML_TEMPLATE, r=risultati, e=errore)
 
+# Grafica pulita per PC e Smartphone (usa Bulma CSS)
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="it">
@@ -58,25 +64,25 @@ HTML_TEMPLATE = """
 </head>
 <body class="container py-5 px-3">
     <h1 class="title has-text-centered">Gestore Sostituzioni</h1>
+    
     {% if e %}<div class="notification is-danger">{{ e }}</div>{% endif %}
+
     <form method="post" class="box">
         <div class="field">
-            <label class="label">Giorno</label>
+            <label class="label">Giorno della settimana</label>
             <input class="input" type="text" name="giorno" placeholder="es. lunedì" required>
         </div>
         <div class="field">
-            <label class="label">Ora (es. 08h10)</label>
+            <label class="label">Ora di inizio</label>
             <input class="input" type="text" name="ora" placeholder="es. 08h10" required>
         </div>
         <button class="button is-link is-fullwidth">Cerca Docenti Liberi</button>
     </form>
+
     {% if r %}
     <div class="box">
-        <h2 class="title is-4 has-text-centered">Riepilogo Ricerca</h2>
-        <table class="table is-bordered is-striped is-fullwidth">
-            <thead><tr><th>Giorno</th><th>Ora</th></tr></thead>
-            <tbody><tr><td>{{ r.giorno }}</td><td>{{ r.ora }}</td></tr></tbody>
-        </table>
+        <h2 class="subtitle">Risultati per <strong>{{ r.giorno }}</strong> alle <strong>{{ r.ora }}</strong></h2>
+        
         <article class="message is-success">
             <div class="message-header"><p>In Disposizione (Priorità)</p></div>
             <div class="message-body">
@@ -85,9 +91,12 @@ HTML_TEMPLATE = """
                 {% else %}<p>Nessun docente in disposizione ora.</p>{% endif %}
             </div>
         </article>
+
         <article class="message is-info">
-            <div class="message-header"><p>Altri docenti liberi</p></div>
-            <div class="message-body"><p>{{ r.liberi|join(', ') }}</p></div>
+            <div class="message-header"><p>Altri docenti liberi (Senza lezione)</p></div>
+            <div class="message-body">
+                <p>{{ r.liberi|join(', ') }}</p>
+            </div>
         </article>
     </div>
     {% endif %}
@@ -96,4 +105,4 @@ HTML_TEMPLATE = """
 """
 
 if __name__ == '__main__':
-    app.run()
+    app.run(debug=True)
