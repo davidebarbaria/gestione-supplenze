@@ -52,7 +52,7 @@ def home():
     
     return render_template_string(HTML_TEMPLATE, r=risultati, e=errore)
 
-# Grafica pulita per PC e Smartphone (usa Bulma CSS)
+# Grafica aggiornata con Tabella di Riepilogo
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="it">
@@ -69,11 +69,11 @@ HTML_TEMPLATE = """
 
     <form method="post" class="box">
         <div class="field">
-            <label class="label">Giorno della settimana</label>
+            <label class="label">Giorno</label>
             <input class="input" type="text" name="giorno" placeholder="es. lunedì" required>
         </div>
         <div class="field">
-            <label class="label">Ora di inizio</label>
+            <label class="label">Ora (es. 08h10)</label>
             <input class="input" type="text" name="ora" placeholder="es. 08h10" required>
         </div>
         <button class="button is-link is-fullwidth">Cerca Docenti Liberi</button>
@@ -81,8 +81,16 @@ HTML_TEMPLATE = """
 
     {% if r %}
     <div class="box">
-        <h2 class="subtitle">Risultati per <strong>{{ r.giorno }}</strong> alle <strong>{{ r.ora }}</strong></h2>
-        
+        <h2 class="title is-4 has-text-centered">Riepilogo Ricerca</h2>
+        <table class="table is-bordered is-striped is-fullwidth">
+            <thead>
+                <tr><th>Giorno</th><th>Ora</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>{{ r.giorno }}</td><td>{{ r.ora }}</td></tr>
+            </tbody>
+        </table>
+
         <article class="message is-success">
             <div class="message-header"><p>In Disposizione (Priorità)</p></div>
             <div class="message-body">
@@ -93,7 +101,7 @@ HTML_TEMPLATE = """
         </article>
 
         <article class="message is-info">
-            <div class="message-header"><p>Altri docenti liberi (Senza lezione)</p></div>
+            <div class="message-header"><p>Altri docenti liberi</p></div>
             <div class="message-body">
                 <p>{{ r.liberi|join(', ') }}</p>
             </div>
@@ -102,6 +110,10 @@ HTML_TEMPLATE = """
     {% endif %}
 </body>
 </html>
+"""
+
+if __name__ == '__main__':
+    app.run(debug=True)
 """
 
 if __name__ == '__main__':
