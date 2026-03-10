@@ -1,5 +1,6 @@
 import pandas as pd
 import sqlite3
+import os
 from flask import Flask, render_template_string, request, redirect
 
 app = Flask(__name__)
@@ -14,6 +15,7 @@ def get_db():
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
+    # Caricamento dati dal CSV
     df = pd.read_csv('EXP_COURS.csv', sep=';', dtype=str)
     giorni = sorted(df['GIORNO'].str.strip().dropna().unique().tolist())
     ore = sorted(df['O.INIZIO'].str.strip().dropna().unique().tolist())
@@ -26,20 +28,19 @@ def home():
         o = request.form.get('ora')
         a = request.form.get('docente_assente')
 
-        # 1. LOGICA COPRESENZE: Cerchiamo la lezione del docente assente
-        lezione = df[(df['GIORNO'] == g) & (df['O.INIZIO'] == o) & (df['DOC_COGN'].str.contains(a, na=False))]
+        # 1. LOGICA COPRESENZE
+        lezione = df[(df['GIORNO'] == g) & (df['O.INIZIO'] == o) & (df['DOC_COGN'].str.contains(a, na=False, case=False))]
         
         if not lezione.empty:
             classe_target = lezione.iloc[0]['CLASSE']
             docenti_ora = lezione.iloc[0]['DOC_COGN']
             
-            # Verifichiamo se ci sono più nomi (separati da # nel CSV)
             lista_docenti = [d.strip() for d in docenti_ora.split('#')]
             if len(lista_docenti) > 1:
-                altri = [d for d in lista_docenti if d != a]
+                altri = [d for d in lista_docenti if d.lower() != a.lower()]
                 avviso_copresenza = f"ATTENZIONE: In classe {classe_target} è presente il co-docente: {', '.join(altri)}. Sostituzione non strettamente necessaria."
 
-            # 2. CERCA SOSTITUTI (Docenti che hanno 'DISP' o 'Z_...' in quell'ora)
+            # 2. CERCA SOSTITUTI
             sostituti = df[(df['GIORNO'] == g) & (df['O.INIZIO'] == o) & (df['MAT_NOME'].str.contains('DISP|Z_', na=False, case=False))]
             lista_sostituti = sostituti['DOC_COGN'].unique().tolist()
             
@@ -109,15 +110,14 @@ def home():
 
 @app.route('/segreteria', methods=['GET', 'POST'])
 def segreteria():
-    # Carichiamo i docenti dal CSV per il menù a tendina
     df = pd.read_csv('EXP_COURS.csv', sep=';', dtype=str)
     lista_completa_docenti = sorted({d.strip() for d_str in df['DOC_COGN'].dropna() for d in str(d_str).split('#') if d.strip()})
     
     conn = get_db()
     if request.method == 'POST':
         docente = request.form.get('docente')
-        ore = int(request.form.get('ore'))
-        conn.execute('INSERT INTO bilancio_ore (docente, ore_debito) VALUES (?, ?) ON CONFLICT(docente) DO UPDATE SET ore_debito = ore_debito + ?', (docente, ore, ore))
+        ore_v = int(request.form.get('ore'))
+        conn.execute('INSERT INTO bilancio_ore (docente, ore_debito) VALUES (?, ?) ON CONFLICT(docente) DO UPDATE SET ore_debito = ore_debito + ?', (docente, ore_v, ore_v))
         conn.commit()
     
     dati = conn.execute('SELECT docente, ore_debito, ore_recuperate, (ore_recuperate - ore_debito) as saldo FROM bilancio_ore ORDER BY saldo ASC').fetchall()
@@ -131,7 +131,7 @@ def segreteria():
         <div class="tabs is-toggle is-centered">
             <ul>
                 <li><a href="/">Sostituzione</a></li>
-                <li class="is-active"><a>Segreteria</a></li>
+                <li class="is-active"><a href="/segreteria">Segreteria</a></li>
             </ul>
         </div>
         <form method="post" class="box">
@@ -147,27 +147,3 @@ def segreteria():
                 </div>
                 <div class="control">
                     <input type="number" name="ore" class="input" placeholder="Ore" required>
-                </div>
-                <div class="control">
-                    <button class="button is-danger">Aggiungi Debito</button>
-                </div>
-            </div>
-        </form>
-
-        <table class="table is-fullwidth is-striped">
-            <thead><tr><th>Docente</th><th>Debito</th><th>Recuperate</th><th>Saldo (Netto)</th></tr></thead>
-            <tbody>
-                {% for d in dati %}
-                <tr>
-                    <td>{{ d[0] }}</td><td>{{ d[1] }}</td><td>{{ d[2] }}</td>
-                    <td class="{% if d[3] < 0 %}has-text-danger{% else %}has-text-success{% endif %}"><b>{{ d[3] }}</b></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </body>
-    </html>
-    """, docenti=lista_completa_docenti, dati=dati)
-
-if __name__ == '__main__':
-    app.run(debug=True)
